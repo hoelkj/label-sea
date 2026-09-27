@@ -1,0 +1,50 @@
+title: Beispiel Aufbau
+connectors:
+  cee125:
+    kind: CEE
+    ampere: 125
+  cee63:
+    kind: CEE
+    ampere: 63
+  cee32:
+    kind: CEE
+    ampere: 32
+  schuko:
+    kind: Schuko
+    ampere: 16
+
+components:
+  - key: sea-125
+    name: SEA 125
+    type: erzeuger
+    power:
+      apparent_kva: 125
+      active_kw: 100
+    outputs:
+      - ref: cee125
+        label: Einspeisung
+      - ref: cee63
+        label: Reserve
+
+  - key: hauptverteiler
+    name: Hauptverteiler
+    type: verteiler
+    inputs:
+      - ref: cee125
+        label: Eingang
+    outputs:
+      - ref: cee63
+        label: Abgang A
+      - ref: cee32
+        label: Abgang B
+      - ref: schuko
+        label: Service
+
+  - key: verbraucher-pumpe
+    name: Pumpe 1
+    type: verbraucher
+    power:
+      active_kw: 12
+    inputs:
+      - ref: cee32
+        label: Einspeisung

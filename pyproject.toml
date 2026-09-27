@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "label-sea"
+version = "0.1.0"
+description = "CLI tool to generate printable labels for electrical connection plans"
+readme = "readme.md"
+requires-python = ">=3.11"
+dependencies = [
+  "jsonschema>=4.23",
+  "PyYAML>=6.0",
+  "reportlab>=4.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.7.0",
+]
+
+[project.scripts]
+label-sea = "label_sea.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
