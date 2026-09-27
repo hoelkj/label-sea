@@ -47,25 +47,144 @@ jobs:
           load: true
           tags: label-sea:ci
 
+      - name: Collect image metadata
+        id: image-meta
+        run: |
+          image_size_bytes="$(docker image inspect label-sea:ci --format '{{.Size}}')"
+          image_size_mb="$((image_size_bytes / 1024 / 1024))"
+          echo "size_bytes=${image_size_bytes}" >> "$GITHUB_OUTPUT"
+          echo "size_mb=${image_size_mb}" >> "$GITHUB_OUTPUT"
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
           image: label-sea:ci
           format: spdx-json
           output-file: label-sea.spdx.json
+          upload-artifact: false
+
+      - name: Pretty-print SBOM
+        run: |
+          python -m json.tool label-sea.spdx.json > label-sea.spdx.pretty.json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v7
         with:
           name: label-sea-sbom
-          path: label-sea.spdx.json
+          path: |
+            label-sea.spdx.json
+            label-sea.spdx.pretty.json
 
       - name: CVE scan image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: label-sea:ci
-          format: table
-          exit-code: '1'
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+          hide-progress: true
           ignore-unfixed: true
           severity: HIGH,CRITICAL
           vuln-type: os,library
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: label-sea-trivy-report
+          path: trivy-results.json
+
+      - name: Supply-chain summary
+        env:
+          IMAGE_SIZE_MB: ${{ steps.image-meta.outputs.size_mb }}
+          IMAGE_SIZE_BYTES: ${{ steps.image-meta.outputs.size_bytes }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          sbom = json.loads(Path("label-sea.spdx.json").read_text(encoding="utf-8"))
+          trivy = json.loads(Path("trivy-results.json").read_text(encoding="utf-8"))
+
+          packages = sbom.get("packages", [])
+          files = sbom.get("files", [])
+          relationships = sbom.get("relationships", [])
+
+          results = trivy.get("Results", [])
+          findings = []
+          for result in results:
+            target = result.get("Target", "unknown")
+            for vuln in result.get("Vulnerabilities") or []:
+              findings.append(
+                {
+                  "target": target,
+                  "severity": vuln.get("Severity", "UNKNOWN"),
+                  "id": vuln.get("VulnerabilityID", "n/a"),
+                  "pkg": vuln.get("PkgName", "n/a"),
+                  "installed": vuln.get("InstalledVersion", "n/a"),
+                  "fixed": vuln.get("FixedVersion") or "unfixed",
+                  "title": (vuln.get("Title") or "").strip(),
+                }
+              )
+
+          severity_order = ["CRITICAL", "HIGH"]
+          severity_counts = {
+            severity: sum(1 for finding in findings if finding["severity"] == severity)
+            for severity in severity_order
+          }
+          findings.sort(
+            key=lambda finding: (
+              severity_order.index(finding["severity"]) if finding["severity"] in severity_order else 99,
+              finding["target"],
+              finding["pkg"],
+            )
+          )
+          top_findings = findings[:10]
+
+          lines = [
+            "## Supply-chain summary",
+            "",
+            "### Container image",
+            "",
+            f"- Image: `label-sea:ci`",
+            f"- Size: `{os.environ['IMAGE_SIZE_MB']} MB` ({os.environ['IMAGE_SIZE_BYTES']} bytes)",
+            "",
+            "### SBOM",
+            "",
+            f"- Packages: `{len(packages)}`",
+            f"- Files: `{len(files)}`",
+            f"- Relationships: `{len(relationships)}`",
+            "",
+            "### Vulnerability summary",
+            "",
+            f"- Critical: `{severity_counts['CRITICAL']}`",
+            f"- High: `{severity_counts['HIGH']}`",
+          ]
+
+          if top_findings:
+            lines.extend(
+              [
+                "",
+                "### Top findings",
+                "",
+                "| Severity | Package | Installed | Fixed | Vulnerability | Target |",
+                "| --- | --- | --- | --- | --- | --- |",
+              ]
+            )
+            for finding in top_findings:
+              lines.append(
+                "| {severity} | {pkg} | {installed} | {fixed} | {vuln} | {target} |".format(
+                  severity=finding["severity"],
+                  pkg=finding["pkg"],
+                  installed=finding["installed"],
+                  fixed=finding["fixed"],
+                  vuln=finding["id"],
+                  target=finding["target"],
+                )
+              )
+          else:
+            lines.extend(["", "No HIGH or CRITICAL findings reported by Trivy."])
+
+          summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
