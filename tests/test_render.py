@@ -40,3 +40,19 @@ def test_rendered_svg_contains_full_edge_connector(tmp_path: Path) -> None:
 
     assert 'y2="0.0"' in svg
     assert "Schuko" not in svg
+
+
+def test_rendered_svg_contains_fine_dashed_connector(tmp_path: Path) -> None:
+    component = Component(
+        key="generator-1",
+        name="Notstromaggregat",
+        type="generator",
+        outputs=[Port(kind="CEE", ampere=16, style="fine-dashed")],
+    )
+
+    output_file = tmp_path / "generator.svg"
+    render_component_svg(component, 50, output_file)
+    svg = output_file.read_text(encoding="utf-8")
+
+    assert 'stroke-dasharray="2,2"' in svg
+    assert "CEE 16A" in svg

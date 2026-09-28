@@ -30,6 +30,7 @@ TYPE_ALIASES = {
 class Port:
     kind: str
     ampere: int
+    style: str = "solid"
 
     @property
     def short_name(self) -> str:
@@ -82,6 +83,7 @@ class ConnectorDefinition:
     key: str
     kind: str
     ampere: int
+    style: str = "solid"
 
 
 def load_project(path: Path) -> Project:
@@ -212,8 +214,14 @@ def parse_connectors(raw: object) -> dict[str, ConnectorDefinition]:
         ampere = item.get("ampere")
         if not isinstance(ampere, int) or ampere <= 0:
             raise ValidationError(f"Connector '{key}' needs a positive integer 'ampere'.")
+        style = normalize_style(item.get("style"), f"connectors.{key}")
         validate_connector(kind, ampere, f"connectors.{key}")
-        connectors[key] = ConnectorDefinition(key=key, kind=kind, ampere=ampere)
+        connectors[key] = ConnectorDefinition(
+            key=key,
+            kind=kind,
+            ampere=ampere,
+            style=style,
+        )
     return connectors
 
 
@@ -250,8 +258,9 @@ def parse_ports(
                 "a positive integer 'ampere'."
             )
         count = parse_port_count(component_key, field_name, index, item)
+        style = normalize_style(item.get("style"), f"{component_key}.{field_name}[{index}]")
         validate_connector(kind, ampere, f"{component_key}.{field_name}[{index}]")
-        ports.extend(Port(kind=kind, ampere=ampere) for _ in range(count))
+        ports.extend(Port(kind=kind, ampere=ampere, style=style) for _ in range(count))
     return ports
 
 
@@ -275,7 +284,14 @@ def parse_port_reference(
 
     count = parse_port_count(component_key, field_name, index, raw)
     connector = connectors[ref]
-    return [Port(kind=connector.kind, ampere=connector.ampere) for _ in range(count)]
+    return [
+        Port(
+            kind=connector.kind,
+            ampere=connector.ampere,
+            style=connector.style,
+        )
+        for _ in range(count)
+    ]
 
 
 def parse_port_count(
@@ -305,6 +321,18 @@ def validate_connector(kind: str, ampere: int, path: str) -> None:
             f"Field '{path}' uses unsupported Schuko ampere '{ampere}'. "
             "Schuko must be defined as 16A."
         )
+
+
+def normalize_style(value: object, path: str) -> str:
+    if value is None:
+        return "solid"
+    style = str(value).strip().lower()
+    if style not in {"solid", "dashed", "fine-dashed"}:
+        raise ValidationError(
+            f"Field '{path}' uses unsupported style '{style}'. "
+            "Allowed values are solid, dashed, fine-dashed."
+        )
+    return style
 
 
 def coerce_number(value: object, path: str) -> float:

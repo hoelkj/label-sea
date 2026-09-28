@@ -40,6 +40,31 @@ components:
     assert all(port.short_name == "CEE 63A" for port in project.components[0].outputs)
 
 
+def test_connector_label_and_style_are_loaded(tmp_path: Path) -> None:
+    yaml_file = tmp_path / "styled.yaml"
+    yaml_file.write_text(
+        """
+connectors:
+  laieneinspeisung:
+    kind: CEE
+    ampere: 16
+    style: fine-dashed
+components:
+  - name: SEA 1
+    type: erzeuger
+    outputs:
+      - ref: laieneinspeisung
+""".strip(),
+        encoding="utf-8",
+    )
+
+    project = load_project(yaml_file)
+
+    port = project.components[0].outputs[0]
+    assert port.short_name == "CEE 16A"
+    assert port.style == "fine-dashed"
+
+
 def test_duplicate_component_key_fails(tmp_path: Path) -> None:
     yaml_file = tmp_path / "duplicate.yaml"
     yaml_file.write_text(
@@ -124,6 +149,28 @@ components:
     )
 
     with pytest.raises(ValidationError, match="Allowed values are 16, 32, 63, 125"):
+        load_project(yaml_file)
+
+
+def test_invalid_connector_style_fails(tmp_path: Path) -> None:
+    yaml_file = tmp_path / "style.yaml"
+    yaml_file.write_text(
+        """
+connectors:
+  cee63:
+    kind: CEE
+    ampere: 63
+    style: dotted
+components:
+  - name: SEA 1
+    type: erzeuger
+    outputs:
+      - ref: cee63
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="Schema validation failed"):
         load_project(yaml_file)
 
 

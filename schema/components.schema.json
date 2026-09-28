@@ -84,6 +84,10 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 125
+        },
+        "style": {
+          "type": "string",
+          "enum": ["solid", "dashed", "fine-dashed"]
         }
       }
     },
@@ -101,6 +105,10 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 125
+        },
+        "style": {
+          "type": "string",
+          "enum": ["solid", "dashed", "fine-dashed"]
         },
         "count": {
           "type": "integer",
