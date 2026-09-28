@@ -14,6 +14,32 @@ def test_load_project_from_example() -> None:
     assert project.components[1].outputs[-1].short_name == "Schuko"
 
 
+def test_count_expands_ports(tmp_path: Path) -> None:
+    yaml_file = tmp_path / "count.yaml"
+    yaml_file.write_text(
+        """
+connectors:
+  cee63:
+    kind: CEE
+    ampere: 63
+components:
+  - name: Verteiler A
+    type: verteiler
+    inputs:
+      - ref: cee63
+    outputs:
+      - ref: cee63
+        count: 3
+""".strip(),
+        encoding="utf-8",
+    )
+
+    project = load_project(yaml_file)
+
+    assert len(project.components[0].outputs) == 3
+    assert all(port.short_name == "CEE 63A" for port in project.components[0].outputs)
+
+
 def test_duplicate_component_key_fails(tmp_path: Path) -> None:
     yaml_file = tmp_path / "duplicate.yaml"
     yaml_file.write_text(
@@ -98,4 +124,26 @@ components:
     )
 
     with pytest.raises(ValidationError, match="Allowed values are 16, 32, 63, 125"):
+        load_project(yaml_file)
+
+
+def test_label_field_is_rejected_by_schema(tmp_path: Path) -> None:
+    yaml_file = tmp_path / "label.yaml"
+    yaml_file.write_text(
+        """
+connectors:
+  cee63:
+    kind: CEE
+    ampere: 63
+components:
+  - name: SEA 1
+    type: erzeuger
+    outputs:
+      - ref: cee63
+        label: Reserve
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="Schema validation failed"):
         load_project(yaml_file)

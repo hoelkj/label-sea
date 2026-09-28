@@ -47,7 +47,8 @@ uv run label-sea validate --input examples/template.yaml
 - `connectors` definiert zentrale anschlusstypen, die in komponenten per `ref` wiederverwendet werden koennen
 - jede komponente hat mindestens `name`, `type` und je nach typ `inputs` oder `outputs`
 - gültige typen sind `erzeuger`, `verbraucher`, `verteiler` sowie die englischen varianten
-- anschlüsse bestehen aus `ref` plus optional `label`; inline `kind` und `ampere` werden weiter unterstützt
+- anschlüsse bestehen aus `ref` plus optional `count`; inline `kind` und `ampere` werden weiter unterstützt
+- `count` erweitert einen eintrag auf mehrere gleiche anschlüsse, ohne dass du ihn mehrfach auflisten musst
 - `CEE` ist auf normnahe werte `16`, `32`, `63`, `125` begrenzt; `Schuko` ist fest `16A`
 - das formale schema liegt in `schema/components.schema.json`
 

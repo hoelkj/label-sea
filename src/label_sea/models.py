@@ -30,13 +30,6 @@ TYPE_ALIASES = {
 class Port:
     kind: str
     ampere: int
-    label: str | None = None
-
-    @property
-    def display_name(self) -> str:
-        if self.label:
-            return f"{self.label} | {self.kind} {self.ampere}A"
-        return f"{self.kind} {self.ampere}A"
 
     @property
     def short_name(self) -> str:
@@ -241,8 +234,7 @@ def parse_ports(
                 "must be a mapping."
             )
         if "ref" in item:
-            port = parse_port_reference(component_key, field_name, index, item, connectors)
-            ports.append(port)
+            ports.extend(parse_port_reference(component_key, field_name, index, item, connectors))
             continue
 
         kind = str(item.get("kind") or "").strip()
@@ -257,9 +249,9 @@ def parse_ports(
                 f"Component '{component_key}' field '{field_name}' entry #{index} needs "
                 "a positive integer 'ampere'."
             )
+        count = parse_port_count(component_key, field_name, index, item)
         validate_connector(kind, ampere, f"{component_key}.{field_name}[{index}]")
-        label = item.get("label")
-        ports.append(Port(kind=kind, ampere=ampere, label=str(label) if label else None))
+        ports.extend(Port(kind=kind, ampere=ampere) for _ in range(count))
     return ports
 
 
@@ -269,7 +261,7 @@ def parse_port_reference(
     index: int,
     raw: dict[str, object],
     connectors: dict[str, ConnectorDefinition],
-) -> Port:
+) -> list[Port]:
     ref = str(raw.get("ref") or "").strip()
     if not ref:
         raise ValidationError(
@@ -281,13 +273,24 @@ def parse_port_reference(
             f"unknown connector '{ref}'."
         )
 
-    label = raw.get("label")
+    count = parse_port_count(component_key, field_name, index, raw)
     connector = connectors[ref]
-    return Port(
-        kind=connector.kind,
-        ampere=connector.ampere,
-        label=str(label) if label else None,
-    )
+    return [Port(kind=connector.kind, ampere=connector.ampere) for _ in range(count)]
+
+
+def parse_port_count(
+    component_key: str,
+    field_name: str,
+    index: int,
+    raw: dict[str, object],
+) -> int:
+    count = raw.get("count", 1)
+    if not isinstance(count, int) or count <= 0:
+        raise ValidationError(
+            f"Component '{component_key}' field '{field_name}' entry #{index} needs "
+            "a positive integer 'count'."
+        )
+    return count
 
 
 def validate_connector(kind: str, ampere: int, path: str) -> None:

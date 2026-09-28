@@ -1,4 +1,4 @@
-title: Beispiel Aufbau
+title: OELM
 connectors:
   cee125:
     kind: CEE
@@ -9,13 +9,16 @@ connectors:
   cee32:
     kind: CEE
     ampere: 32
+  cee16:
+    kind: CEE
+    ampere: 16
   schuko:
     kind: Schuko
     ampere: 16
 
 components:
-  - key: sea-125
-    name: SEA 125
+  - key: sea-hv
+    name: NEA HV
     type: erzeuger
     power:
       apparent_kva: 125

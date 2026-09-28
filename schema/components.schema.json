@@ -102,10 +102,10 @@
           "minimum": 1,
           "maximum": 125
         },
-        "label": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
         }
       }
     },
@@ -120,10 +120,10 @@
           "maxLength": 80,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
         },
-        "label": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
         }
       }
     },
