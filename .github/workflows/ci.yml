@@ -52,8 +52,8 @@ jobs:
           if not tests_match or not coverage_match:
               raise SystemExit('unable to parse pytest metrics')
           with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
-              handle.write(f"tests_passed={tests_match.group(1)}\\n")
-              handle.write(f"coverage_pct={coverage_match.group(1)}%\\n")
+              handle.write(f"tests_passed={tests_match.group(1)}\n")
+              handle.write(f"coverage_pct={coverage_match.group(1)}%\n")
           PY
 
   supply-chain:
@@ -118,7 +118,7 @@ jobs:
 
           sbom = json.loads(Path('label-sea.spdx.json').read_text(encoding='utf-8'))
           with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
-              handle.write(f"packages={len(sbom.get('packages', []))} packages\\n")
+        handle.write(f"packages={len(sbom.get('packages', []))} packages\n")
           PY
 
       - name: CVE scan image
@@ -155,8 +155,8 @@ jobs:
                   if severity in counts:
                       counts[severity] += 1
           with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
-              handle.write(f"critical={counts['CRITICAL']}\\n")
-              handle.write(f"high={counts['HIGH']}\\n")
+              handle.write(f"critical={counts['CRITICAL']}\n")
+              handle.write(f"high={counts['HIGH']}\n")
           PY
 
       - name: Supply-chain summary
