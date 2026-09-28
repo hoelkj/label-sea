@@ -118,7 +118,7 @@ jobs:
 
           sbom = json.loads(Path('label-sea.spdx.json').read_text(encoding='utf-8'))
           with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
-        handle.write(f"packages={len(sbom.get('packages', []))} packages\n")
+              handle.write(f"packages={len(sbom.get('packages', []))} packages\n")
           PY
 
       - name: CVE scan image
