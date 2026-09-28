@@ -7,6 +7,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      tests_passed: ${{ steps.test-metrics.outputs.tests_passed }}
+      coverage_pct: ${{ steps.test-metrics.outputs.coverage_pct }}
+      quality_status: ${{ steps.ruff-status.outputs.quality_status }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -25,17 +29,46 @@ jobs:
       - name: Ruff
         run: uv run ruff check .
 
+      - name: Ruff status
+        id: ruff-status
+        run: echo "quality_status=passing" >> "$GITHUB_OUTPUT"
+
       - name: Pytest
-        run: uv run pytest --cov=label_sea --cov-report=term-missing
+        run: |
+          set -o pipefail
+          uv run pytest --cov=label_sea --cov-report=term-missing | tee pytest.log
+
+      - name: Test metrics
+        id: test-metrics
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          log = Path('pytest.log').read_text(encoding='utf-8')
+          tests_match = re.search(r'(\d+) passed', log)
+          coverage_match = re.search(r'TOTAL\s+\d+\s+\d+\s+(\d+)%', log)
+          if not tests_match or not coverage_match:
+              raise SystemExit('unable to parse pytest metrics')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
+              handle.write(f"tests_passed={tests_match.group(1)}\\n")
+              handle.write(f"coverage_pct={coverage_match.group(1)}%\\n")
+          PY
 
   supply-chain:
     runs-on: ubuntu-latest
     needs: test
     permissions:
       contents: read
+    outputs:
+      image_size_mb: ${{ steps.image-meta.outputs.size_mb }}
+      sbom_packages: ${{ steps.sbom-metrics.outputs.packages }}
+      critical_count: ${{ steps.trivy-metrics.outputs.critical }}
+      high_count: ${{ steps.trivy-metrics.outputs.high }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -75,6 +108,19 @@ jobs:
             label-sea.spdx.json
             label-sea.spdx.pretty.json
 
+      - name: SBOM metrics
+        id: sbom-metrics
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          sbom = json.loads(Path('label-sea.spdx.json').read_text(encoding='utf-8'))
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
+              handle.write(f"packages={len(sbom.get('packages', []))} packages\\n")
+          PY
+
       - name: CVE scan image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -92,6 +138,26 @@ jobs:
         with:
           name: label-sea-trivy-report
           path: trivy-results.json
+
+      - name: Trivy metrics
+        id: trivy-metrics
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path('trivy-results.json').read_text(encoding='utf-8'))
+          counts = {'CRITICAL': 0, 'HIGH': 0}
+          for result in report.get('Results', []):
+              for vuln in result.get('Vulnerabilities') or []:
+                  severity = vuln.get('Severity')
+                  if severity in counts:
+                      counts[severity] += 1
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
+              handle.write(f"critical={counts['CRITICAL']}\\n")
+              handle.write(f"high={counts['HIGH']}\\n")
+          PY
 
       - name: Supply-chain summary
         env:
@@ -188,3 +254,45 @@ jobs:
 
           summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
+
+  badges:
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - supply-chain
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Generate badge files
+        run: |
+          python scripts/write_badges.py \
+            --output-dir badge-data \
+            --tests "${{ needs.test.outputs.tests_passed }} passing" \
+            --coverage "${{ needs.test.outputs.coverage_pct }}" \
+            --quality "${{ needs.test.outputs.quality_status }}" \
+            --image-size "${{ needs.supply-chain.outputs.image_size_mb }} MB" \
+            --sbom-packages "${{ needs.supply-chain.outputs.sbom_packages }}" \
+            --critical "${{ needs.supply-chain.outputs.critical_count }}" \
+            --high "${{ needs.supply-chain.outputs.high_count }}"
+
+      - name: Publish badges branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd badge-data
+          git init -b badges
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add *.json
+          git commit -m "Update badge data" || exit 0
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git push --force origin badges

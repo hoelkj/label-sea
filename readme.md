@@ -1,5 +1,15 @@
 # label-sea
 
+[![CI](https://img.shields.io/github/actions/workflow/status/hoelkj/label-sea/ci.yml?branch=main&label=CI)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/tests.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![Quality](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/quality.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/coverage.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![Image Size](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/image-size.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![SBOM](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/sbom.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![Critical CVEs](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/critical-cves.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![High CVEs](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/hoelkj/label-sea/badges/high-cves.json)](https://github.com/hoelkj/label-sea/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+
 - cli tool zum erzeugen von label
 - label sind für anschlusspläne von Erzeugern / Verbrauchern / Verteilern für elktrische Notversorgungen
 - diese sollen dem betreiner von (Not) Stromerzeugungsanlangen (SEA) und Netzersatzanlagen (NEA) dabei helfen einen Übersicht der verwendeten Komponenten, deren Verkabelung und über die Last / den Verbrauch zu haben. Im Fehlerfall soll eine strukturierte Fehlersuche und -eingrenzung unterstützt werden.
