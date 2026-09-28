@@ -276,13 +276,13 @@ jobs:
         run: |
           python scripts/write_badges.py \
             --output-dir badge-data \
-            --tests "${{ needs.test.outputs.tests_passed }} passing" \
-            --coverage "${{ needs.test.outputs.coverage_pct }}" \
-            --quality "${{ needs.test.outputs.quality_status }}" \
-            --image-size "${{ needs.supply-chain.outputs.image_size_mb }} MB" \
-            --sbom-packages "${{ needs.supply-chain.outputs.sbom_packages }}" \
-            --critical "${{ needs.supply-chain.outputs.critical_count }}" \
-            --high "${{ needs.supply-chain.outputs.high_count }}"
+            --tests "${{ needs.test.outputs.tests_passed && format('{0} passing', needs.test.outputs.tests_passed) || 'unknown' }}" \
+            --coverage "${{ needs.test.outputs.coverage_pct || 'unknown' }}" \
+            --quality "${{ needs.test.outputs.quality_status || 'unknown' }}" \
+            --image-size "${{ needs.supply-chain.outputs.image_size_mb && format('{0} MB', needs.supply-chain.outputs.image_size_mb) || 'unknown' }}" \
+            --sbom-packages "${{ needs.supply-chain.outputs.sbom_packages || 'unknown' }}" \
+            --critical "${{ needs.supply-chain.outputs.critical_count || 'unknown' }}" \
+            --high "${{ needs.supply-chain.outputs.high_count || 'unknown' }}"
 
       - name: Publish badges branch
         env:
