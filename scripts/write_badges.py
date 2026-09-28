@@ -30,24 +30,39 @@ def main() -> int:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    write_badge(output_dir, "tests", "tests", args.tests, "brightgreen")
-    write_badge(output_dir, "coverage", "coverage", args.coverage, coverage_color(args.coverage))
-    write_badge(output_dir, "quality", "quality", args.quality, "brightgreen")
-    write_badge(output_dir, "image-size", "image size", args.image_size, "blue")
-    write_badge(output_dir, "sbom", "SBOM", args.sbom_packages, "informational")
+    tests = normalize_text(args.tests)
+    coverage = normalize_text(args.coverage)
+    quality = normalize_text(args.quality)
+    image_size = normalize_text(args.image_size)
+    sbom_packages = normalize_text(args.sbom_packages)
+    critical = normalize_number_text(args.critical)
+    high = normalize_number_text(args.high)
+
+    write_badge(output_dir, "tests", "tests", tests, status_color(tests))
+    write_badge(output_dir, "coverage", "coverage", coverage, coverage_color(coverage))
+    write_badge(output_dir, "quality", "quality", quality, status_color(quality))
+    write_badge(output_dir, "image-size", "image size", image_size, "blue")
+    write_badge(output_dir, "sbom", "SBOM", sbom_packages, "informational")
     write_badge(
         output_dir,
         "critical-cves",
         "critical CVEs",
-        args.critical,
-        severity_color(args.critical),
+        critical,
+        severity_color(critical),
     )
-    write_badge(output_dir, "high-cves", "high CVEs", args.high, severity_color(args.high))
+    write_badge(output_dir, "high-cves", "high CVEs", high, severity_color(high))
     return 0
 
 
 def coverage_color(coverage: str) -> str:
-    value = int(coverage.rstrip("%"))
+    if not coverage.endswith("%"):
+        return "lightgrey"
+
+    try:
+        value = int(coverage.rstrip("%"))
+    except ValueError:
+        return "lightgrey"
+
     if value >= 90:
         return "brightgreen"
     if value >= 80:
@@ -58,12 +73,35 @@ def coverage_color(coverage: str) -> str:
 
 
 def severity_color(count: str) -> str:
-    value = int(count)
+    try:
+        value = int(count)
+    except ValueError:
+        return "lightgrey"
+
     if value == 0:
         return "brightgreen"
     if value <= 3:
         return "yellow"
     return "red"
+
+
+def status_color(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"unknown", "n/a", ""}:
+        return "lightgrey"
+    return "brightgreen"
+
+
+def normalize_text(value: str) -> str:
+    stripped = value.strip()
+    return stripped or "unknown"
+
+
+def normalize_number_text(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        return "unknown"
+    return stripped
 
 
 if __name__ == "__main__":
