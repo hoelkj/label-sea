@@ -26,6 +26,8 @@ class PortLayout:
     text_y_mm: float
     side: str
     label: str
+    style: str
+    tag: str | None = None
 
 
 @dataclass(slots=True)
@@ -153,6 +155,8 @@ def port_layouts(ports: list, width_mm: float, height_mm: float, side: str) -> l
             text_y_mm=text_y,
             side=side,
             label=port.short_name,
+            style=port.style,
+            tag=port_tag(port.style),
         )
         for position, port in zip(positions, ports, strict=True)
     ]
@@ -288,18 +292,20 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
         line_start = height_mm - 10.0
         line_end = height_mm
 
-    ET.SubElement(
-        root,
-        "line",
-        {
-            "x1": f"{port.x_mm}",
-            "y1": f"{line_start}",
-            "x2": f"{port.x_mm}",
-            "y2": f"{line_end}",
-            "stroke": color,
-            "stroke-width": "1.2",
-        },
-    )
+    line_attributes = {
+        "x1": f"{port.x_mm}",
+        "y1": f"{line_start}",
+        "x2": f"{port.x_mm}",
+        "y2": f"{line_end}",
+        "stroke": color,
+        "stroke-width": "1.2",
+    }
+    dasharray = dash_pattern(port.style)
+    if dasharray is not None:
+        line_attributes["stroke-dasharray"] = dasharray
+        line_attributes["stroke-linecap"] = "round"
+
+    ET.SubElement(root, "line", line_attributes)
     text = ET.SubElement(
         root,
         "text",
@@ -314,6 +320,23 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
         },
     )
     text.text = port.label
+
+    if port.tag:
+        tag_x = port.x_mm - (port.text_x_mm - port.x_mm)
+        tag = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{tag_x}",
+                "y": f"{port.text_y_mm}",
+                "font-size": "3.0",
+                "font-family": "DejaVu Sans, Arial, sans-serif",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {tag_x} {port.text_y_mm})",
+            },
+        )
+        tag.text = port.tag
 
 
 def add_text(
@@ -412,7 +435,12 @@ def draw_pdf_port(
 
     pdf.setStrokeColor(color)
     pdf.setLineWidth(1)
+    dash = pdf_dash_pattern(port.style)
+    if dash is not None:
+        pdf.setDash(*dash)
     pdf.line(port_x, line_start_y, port_x, line_end_y)
+    if dash is not None:
+        pdf.setDash()
 
     pdf.saveState()
     pdf.setFillColor(color)
@@ -421,3 +449,35 @@ def draw_pdf_port(
     pdf.rotate(90)
     pdf.drawCentredString(0, 0, port.label)
     pdf.restoreState()
+
+    if port.tag:
+        tag_x = x_pt + (port.x_mm - (port.text_x_mm - port.x_mm)) * MM_TO_PT
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont("Helvetica", 4.8)
+        pdf.translate(tag_x, text_y)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, port.tag)
+        pdf.restoreState()
+
+
+def dash_pattern(style: str) -> str | None:
+    if style == "dashed":
+        return "4,2"
+    if style == "fine-dashed":
+        return "2,2"
+    return None
+
+
+def pdf_dash_pattern(style: str) -> tuple[float, float] | None:
+    if style == "dashed":
+        return 4.0, 2.0
+    if style == "fine-dashed":
+        return 1.5, 1.5
+    return None
+
+
+def port_tag(style: str) -> str | None:
+    if style == "fine-dashed":
+        return "Laie"
+    return None
