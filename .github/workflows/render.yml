@@ -1,0 +1,80 @@
+name: Render labels
+
+on:
+  workflow_dispatch:
+    inputs:
+      yaml_path:
+        description: Path to the YAML file in the repository
+        required: true
+        default: examples/oelm.yaml
+        type: string
+      band_height:
+        description: Magnet band height in mm
+        required: true
+        default: '50'
+        type: choice
+        options:
+          - '40'
+          - '50'
+      pdf_format:
+        description: Optional combined PDF format
+        required: true
+        default: a4
+        type: choice
+        options:
+          - none
+          - a4
+          - a3
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Render labels
+        env:
+          YAML_PATH: ${{ inputs.yaml_path }}
+          BAND_HEIGHT: ${{ inputs.band_height }}
+          PDF_FORMAT: ${{ inputs.pdf_format }}
+        run: |
+          set -euo pipefail
+
+          output_dir="build/render-${{ github.run_id }}"
+          command=(uv run label-sea build --input "$YAML_PATH" --output-dir "$output_dir" --band-height "$BAND_HEIGHT")
+
+          if [[ "$PDF_FORMAT" != "none" ]]; then
+            command+=(--pdf "$PDF_FORMAT")
+          fi
+
+          "${command[@]}"
+
+          {
+            echo "## Manual render"
+            echo ""
+            echo "- YAML: \`$YAML_PATH\`"
+            echo "- Band height: \`$BAND_HEIGHT mm\`"
+            echo "- PDF: \`$PDF_FORMAT\`"
+            echo "- Output dir: \`$output_dir\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload render artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: label-sea-render-${{ github.run_id }}
+          path: build/render-${{ github.run_id }}
+          retention-days: 2

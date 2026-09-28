@@ -15,32 +15,151 @@ connectors:
   schuko:
     kind: Schuko
     ampere: 16
+  laieneinspeisung63:
+    kind: CEE
+    ampere: 63
+    style: fine-dashed
+  laieneinspeisung125:
+    kind: CEE
+    ampere: 125
+    style: fine-dashed
 
 components:
-  - key: sea-hv
-    name: NEA HV
+  - key: nea-hv
+    name: NEA HV 110
     type: erzeuger
     power:
-      apparent_kva: 125
-      active_kw: 100
+      apparent_kva: 110
+      active_kw: 88
     outputs:
+      - ref: laieneinspeisung63
       - ref: cee125
       - ref: cee63
+      - ref: cee32
+        count: 1
+      - ref: cee16
+        count: 1
+      - ref: schuko
+        count: 2
 
-  - key: hauptverteiler
-    name: Hauptverteiler
+  - key: nea-sh
+    name: NEA SH 250
+    type: erzeuger
+    power:
+      apparent_kva: 250
+      active_kw: 200
+    outputs:
+      - ref: laieneinspeisung125
+      - ref: laieneinspeisung63
+      - ref: cee125
+      - ref: cee63
+      - ref: cee32
+        count: 2
+      - ref: cee16
+        count: 3
+      - ref: schuko
+        count: 5
+
+  - key: nea-n
+    name: NEA F-Gr-N 50
+    type: erzeuger
+    power:
+      apparent_kva: 50
+      active_kw: 40
+    outputs:
+      - ref: laieneinspeisung63
+      - ref: cee63
+      - ref: cee32
+        count: 2
+      - ref: cee16
+        count: 2
+      - ref: schuko
+        count: 6
+
+  - key: nea-elmo
+    name: NEA ELMO 60
+    type: erzeuger
+    power:
+      apparent_kva: 60
+      active_kw: 48
+    outputs:
+      - ref: laieneinspeisung63
+      - ref: cee63
+      - ref: cee32
+        count: 2
+      - ref: cee16
+        count: 3
+      - ref: schuko
+        count: 8
+
+  - key: v1
+    name: V1
+    type: verteiler
+    inputs:
+      - ref: cee63
+    outputs:
+      - ref: cee32
+        count: 2
+      - ref: cee16
+        count: 2
+      - ref: schuko
+        count: 6
+
+  - key: schildkroete-wp-1
+    name: Schildkröte WP 1
+    type: verteiler
+    inputs:
+      - ref: cee63
+    outputs:
+      - ref: cee32
+        count: 2
+      - ref: cee16
+        count: 1
+      - ref: schuko
+        count: 3
+
+  - key: schildkroete-wp-2
+    name: Schildkröte WP 2
+    type: verteiler
+    inputs:
+      - ref: cee32
+    outputs:
+      - ref: cee16
+        count: 2
+      - ref: schuko
+        count: 2
+
+  - key: schildkroete-wp-3
+    name: Schildkröte WP 3
     type: verteiler
     inputs:
       - ref: cee125
     outputs:
       - ref: cee63
+        count: 2
       - ref: cee32
-      - ref: schuko
+        count: 1
 
-  - key: verbraucher-pumpe
-    name: Pumpe 1
+  - key: wilo-pumpe
+    name: Wilo
     type: verbraucher
     power:
-      active_kw: 12
+      active_kw: 10
     inputs:
       - ref: cee32
+
+  - key: tp15-1-pumpe
+    name: Mast TP15-1
+    type: verbraucher
+    power:
+      active_kw: 5.3
+    inputs:
+      - ref: cee16
+
+  - key: atp-20-r-pumpe
+    name: Mast ATP-20-R
+    type: verbraucher
+    power:
+      active_kw: 2.3
+    inputs:
+      - ref: cee16
