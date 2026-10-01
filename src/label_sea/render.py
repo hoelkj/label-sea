@@ -5,7 +5,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from reportlab.lib.colors import HexColor
-from reportlab.lib.pagesizes import A3, A4
+from reportlab.lib.pagesizes import A3, A4, landscape
 from reportlab.pdfgen import canvas
 
 from label_sea.models import Component
@@ -45,6 +45,14 @@ class LabelLayout:
     bottom_ports: list[PortLayout]
 
 
+@dataclass(slots=True)
+class PdfPagePlan:
+    page_size: tuple[float, float]
+    paper_format: str
+    orientation: str
+    warning: str | None = None
+
+
 def render_component_svg(
     component: Component,
     band_height_mm: int,
@@ -57,8 +65,9 @@ def render_component_svg(
     return layout
 
 
-def render_pdf(layouts: list[LabelLayout], page_format: str, output_path: Path) -> None:
-    page_size = {"a4": A4, "a3": A3}[page_format]
+def render_pdf(layouts: list[LabelLayout], page_format: str, output_path: Path) -> PdfPagePlan:
+    plan = choose_pdf_page_plan(layouts, page_format)
+    page_size = plan.page_size
     pdf = canvas.Canvas(str(output_path), pagesize=page_size)
     margin_pt = 14 * MM_TO_PT
     gap_pt = 6 * MM_TO_PT
@@ -88,6 +97,7 @@ def render_pdf(layouts: list[LabelLayout], page_format: str, output_path: Path) 
         row_height = max(row_height, height_pt)
 
     pdf.save()
+    return plan
 
 
 def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
@@ -138,7 +148,7 @@ def port_layouts(ports: list, width_mm: float, height_mm: float, side: str) -> l
     if not ports:
         return []
 
-    margin_mm = 12.0
+    margin_mm = 6.0
     if len(ports) == 1:
         positions = [width_mm / 2]
     else:
@@ -170,11 +180,53 @@ def compute_label_width_mm(
     title_size_mm: float,
     meta_size_mm: float,
 ) -> float:
-    port_count_width = 30.0 + columns * 22.0
+    port_count_width = 20.0 + columns * 12.0
     title_width = 22.0 + estimated_text_width_mm(title_text, title_size_mm)
     meta_width = 22.0 + estimated_text_width_mm(meta_text, meta_size_mm)
-    port_label_width = 52.0 + max_port_label_length(component) * 2.2
+    port_label_width = 40.0 + max_port_label_length(component) * 1.6
     return max(70.0, port_count_width, title_width, meta_width, port_label_width)
+
+
+def choose_pdf_page_plan(layouts: list[LabelLayout], page_format: str) -> PdfPagePlan:
+    if page_format == "a4":
+        candidates = [
+            PdfPagePlan(page_size=A4, paper_format="a4", orientation="portrait"),
+            PdfPagePlan(page_size=landscape(A4), paper_format="a4", orientation="landscape"),
+            PdfPagePlan(
+                page_size=landscape(A3),
+                paper_format="a3",
+                orientation="landscape",
+                warning="Requested A4 PDF was too narrow; using A3 landscape instead.",
+            ),
+        ]
+    else:
+        candidates = [
+            PdfPagePlan(page_size=A3, paper_format="a3", orientation="portrait"),
+            PdfPagePlan(page_size=landscape(A3), paper_format="a3", orientation="landscape"),
+        ]
+
+    if not layouts:
+        return candidates[0]
+
+    required_width_pt = max(layout.width_mm * MM_TO_PT for layout in layouts) + (2 * 14 * MM_TO_PT)
+    for candidate in candidates:
+        if required_width_pt <= candidate.page_size[0]:
+            return candidate
+
+    overflow_warning = (
+        f"Requested {page_format.upper()} PDF is too narrow even on A3 landscape; "
+        "some labels may be clipped."
+    )
+    return PdfPagePlan(
+        page_size=landscape(A3),
+        paper_format="a3",
+        orientation="landscape",
+        warning=overflow_warning,
+    )
+
+
+def choose_pdf_page_size(layouts: list[LabelLayout], page_format: str) -> tuple[float, float]:
+    return choose_pdf_page_plan(layouts, page_format).page_size
 
 
 def max_port_label_length(component: Component) -> int:

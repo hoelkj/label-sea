@@ -86,11 +86,13 @@ def build_command(args: argparse.Namespace) -> int:
 
     if args.pdf:
         pdf_path = output_dir / f"labels-{args.pdf}.pdf"
-        render_pdf(layouts, args.pdf, pdf_path)
+        pdf_plan = render_pdf(layouts, args.pdf, pdf_path)
 
     print(f"Generated {len(layouts)} SVG label(s) in {svg_dir}")
     if args.pdf:
         print(f"Generated PDF layout: {output_dir / ('labels-' + args.pdf + '.pdf')}")
+        if pdf_plan.warning:
+            print(f"warning: {pdf_plan.warning}")
     return 0
 
 
