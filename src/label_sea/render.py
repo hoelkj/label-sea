@@ -190,6 +190,13 @@ def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
         title_size_mm,
         meta_size_mm,
     )
+
+    top_layouts = port_layouts(top_ports, width_mm, height_mm, "top")
+    bottom_layouts = port_layouts(bottom_ports, width_mm, height_mm, "bottom")
+    if component.feed_in:
+        feed_in_layout = build_feed_in_layout(width_mm, height_mm)
+        top_layouts.append(feed_in_layout)
+
     return LabelLayout(
         component=component,
         width_mm=width_mm,
@@ -200,8 +207,8 @@ def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
         meta_size_mm=meta_size_mm,
         title_text=title_text,
         meta_text=meta_text,
-        top_ports=port_layouts(top_ports, width_mm, height_mm, "top"),
-        bottom_ports=port_layouts(bottom_ports, width_mm, height_mm, "bottom"),
+        top_ports=top_layouts,
+        bottom_ports=bottom_layouts,
     )
 
 
@@ -211,6 +218,19 @@ def text_profile(component_type: str, height_mm: float) -> tuple[float, float]:
     if component_type == "consumer":
         return height_mm - 17.0, height_mm - 10.0
     return (height_mm / 2) - 1.5, (height_mm / 2) + 5.5
+
+
+def build_feed_in_layout(width_mm: float, height_mm: float) -> PortLayout:
+    x_mm = width_mm - 8.5
+    return PortLayout(
+        x_mm=x_mm,
+        text_x_mm=x_mm,
+        text_y_mm=11.0,
+        side="top",
+        label="Einspeisung",
+        style="solid",
+        tag="Stäubli",
+    )
 
 
 def port_layouts(ports: list, width_mm: float, height_mm: float, side: str) -> list[PortLayout]:
@@ -432,6 +452,41 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
     value_font_size = "8.0" if value_text == "Schuko" else "7.0"
     label_y = port.text_y_mm - 1.6
     value_y = port.text_y_mm + 2.2
+
+    if port.label == "Einspeisung" and port.tag == "Stäubli":
+        left = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{port.x_mm - 3.2}",
+                "y": f"{port.text_y_mm + 0.8}",
+                "font-size": "7.0",
+                "font-family": preferred_font_family(),
+                "font-weight": "500",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {port.x_mm - 3.2} {port.text_y_mm + 0.8})",
+            },
+        )
+        left.text = "Einspeisung"
+
+        right = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{port.x_mm + 3.2}",
+                "y": f"{port.text_y_mm + 0.8}",
+                "font-size": "7.0",
+                "font-family": preferred_font_family(),
+                "font-weight": "500",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {port.x_mm + 3.2} {port.text_y_mm + 0.8})",
+            },
+        )
+        right.text = "Stäubli"
+        return
+
     if label_text:
         text = ET.SubElement(
             root,
@@ -591,6 +646,25 @@ def draw_pdf_port(
     value_font_size = 8.3 if value_text == "Schuko" else 7.3
     label_y = text_y - 3.2 * MM_TO_PT
     value_y = text_y + 3.1 * MM_TO_PT
+
+    if port.label == "Einspeisung" and port.tag == "Stäubli":
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont(pdf_font_name(False), 7.0)
+        pdf.translate(x_pt + (port.x_mm - 3.2) * MM_TO_PT, text_y + 0.7 * MM_TO_PT)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, "Einspeisung")
+        pdf.restoreState()
+
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont(pdf_font_name(False), 7.0)
+        pdf.translate(x_pt + (port.x_mm + 3.2) * MM_TO_PT, text_y + 0.7 * MM_TO_PT)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, "Stäubli")
+        pdf.restoreState()
+        return
+
     if label_text:
         pdf.saveState()
         pdf.setFillColor(color)
@@ -639,6 +713,8 @@ def pdf_dash_pattern(style: str) -> tuple[float, float] | None:
 def split_port_label(label: str) -> tuple[str, str]:
     if label == "Schuko":
         return "", "Schuko"
+    if label == "Einspeisung":
+        return "Einspeisung", "Stäubli"
     if " " not in label:
         return label, label
     label_prefix, value = label.rsplit(" ", 1)

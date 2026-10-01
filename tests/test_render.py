@@ -125,6 +125,25 @@ def test_port_label_emphasizes_ampere_value(tmp_path: Path) -> None:
     assert 'font-size="7.0"' in svg
 
 
+def test_rendered_svg_contains_feed_in_port(tmp_path: Path) -> None:
+    component = Component(
+        key="feed-in-1",
+        name="Netzstation",
+        type="distributor",
+        inputs=[Port(kind="CEE", ampere=125)],
+        outputs=[Port(kind="CEE", ampere=63)],
+        feed_in=True,
+    )
+
+    output_file = tmp_path / "feedin.svg"
+    render_component_svg(component, 50, output_file)
+    svg = output_file.read_text(encoding="utf-8")
+
+    assert "Einspeisung" in svg
+    assert "Stäubli" in svg
+    assert "stroke-linecap=\"round\"" in svg
+
+
 def test_schuko_label_is_not_drawn_twice(tmp_path: Path) -> None:
     component = Component(
         key="consumer-3",
