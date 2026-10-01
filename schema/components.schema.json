@@ -60,6 +60,9 @@
             "active_kw": { "type": "number", "minimum": 0 }
           }
         },
+        "feed_in": {
+          "type": "boolean"
+        },
         "inputs": {
           "type": "array",
           "items": { "$ref": "#/$defs/portReference" }

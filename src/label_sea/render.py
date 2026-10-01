@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import glob
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from reportlab.lib.colors import HexColor
-from reportlab.lib.pagesizes import A3, A4
+from reportlab.lib.pagesizes import A3, A4, landscape
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from label_sea.models import Component
@@ -17,6 +21,71 @@ TYPE_COLORS = {
     "consumer": {"accent": "#B26A00", "fill": "#FFF8EB"},
     "distributor": {"accent": "#005B96", "fill": "#EEF6FC"},
 }
+
+
+def preferred_font_family() -> str:
+    candidates = [
+        "Lubalin Graph",
+        "Lubalin",
+        "ITC Lubalin Graph Std",
+        "Arial",
+        "DejaVu Sans",
+        "Noto Sans",
+    ]
+    formatted = ", ".join(f'"{candidate}"' for candidate in candidates)
+    return f"{formatted}, sans-serif"
+
+
+def _find_font_file() -> str | None:
+    custom_font_dir = os.environ.get("LABEL_SEA_FONT")
+    roots = [Path(custom_font_dir)] if custom_font_dir else []
+    project_root = Path(__file__).resolve().parents[2]
+    roots.extend(
+        [
+            project_root / "fonts",
+            Path.cwd() / "fonts",
+            Path.home() / ".fonts",
+            Path.home() / ".local" / "share" / "fonts",
+            Path("/usr/share/fonts"),
+            Path("/usr/local/share/fonts"),
+        ]
+    )
+
+    patterns = ["*Lubalin*", "*LubalinGraph*", "*lubalin*"]
+    seen: set[str] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for pattern in patterns:
+            for match in glob.glob(str(root / pattern), recursive=True):
+                normalized = str(Path(match))
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                if match.lower().endswith((".ttf", ".otf", ".ttc")):
+                    return normalized
+    return None
+
+
+def _register_lubalin_font_if_present() -> str | None:
+    font_file = _find_font_file()
+    if not font_file:
+        return None
+    font_name = "Lubalin"
+    try:
+        pdfmetrics.registerFont(TTFont(font_name, font_file))
+    except Exception:
+        return None
+    return font_name
+
+
+LUBALIN_FONT = _register_lubalin_font_if_present()
+
+
+def pdf_font_name(is_bold: bool) -> str:
+    if LUBALIN_FONT is not None:
+        return LUBALIN_FONT
+    return "Helvetica-Bold" if is_bold else "Helvetica"
 
 
 @dataclass(slots=True)
@@ -45,6 +114,14 @@ class LabelLayout:
     bottom_ports: list[PortLayout]
 
 
+@dataclass(slots=True)
+class PdfPagePlan:
+    page_size: tuple[float, float]
+    paper_format: str
+    orientation: str
+    warning: str | None = None
+
+
 def render_component_svg(
     component: Component,
     band_height_mm: int,
@@ -57,8 +134,9 @@ def render_component_svg(
     return layout
 
 
-def render_pdf(layouts: list[LabelLayout], page_format: str, output_path: Path) -> None:
-    page_size = {"a4": A4, "a3": A3}[page_format]
+def render_pdf(layouts: list[LabelLayout], page_format: str, output_path: Path) -> PdfPagePlan:
+    plan = choose_pdf_page_plan(layouts, page_format)
+    page_size = plan.page_size
     pdf = canvas.Canvas(str(output_path), pagesize=page_size)
     margin_pt = 14 * MM_TO_PT
     gap_pt = 6 * MM_TO_PT
@@ -88,6 +166,7 @@ def render_pdf(layouts: list[LabelLayout], page_format: str, output_path: Path) 
         row_height = max(row_height, height_pt)
 
     pdf.save()
+    return plan
 
 
 def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
@@ -101,8 +180,8 @@ def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
         meta_text = f"{meta_text} | {component.power_label}"
     title_text = compact_text(component.name, 34)
 
-    title_size_mm = fit_font_size(title_text, 6.8, 5.4)
-    meta_size_mm = fit_font_size(meta_text, 3.3, 2.7)
+    title_size_mm = fit_font_size(title_text, 7.8, 6.2)
+    meta_size_mm = fit_font_size(meta_text, 4.8, 3.6)
     width_mm = compute_label_width_mm(
         component,
         columns,
@@ -111,6 +190,13 @@ def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
         title_size_mm,
         meta_size_mm,
     )
+
+    top_layouts = port_layouts(top_ports, width_mm, height_mm, "top")
+    bottom_layouts = port_layouts(bottom_ports, width_mm, height_mm, "bottom")
+    if component.feed_in:
+        feed_in_layout = build_feed_in_layout(width_mm, height_mm)
+        top_layouts.append(feed_in_layout)
+
     return LabelLayout(
         component=component,
         width_mm=width_mm,
@@ -121,8 +207,8 @@ def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
         meta_size_mm=meta_size_mm,
         title_text=title_text,
         meta_text=meta_text,
-        top_ports=port_layouts(top_ports, width_mm, height_mm, "top"),
-        bottom_ports=port_layouts(bottom_ports, width_mm, height_mm, "bottom"),
+        top_ports=top_layouts,
+        bottom_ports=bottom_layouts,
     )
 
 
@@ -134,11 +220,24 @@ def text_profile(component_type: str, height_mm: float) -> tuple[float, float]:
     return (height_mm / 2) - 1.5, (height_mm / 2) + 5.5
 
 
+def build_feed_in_layout(width_mm: float, height_mm: float) -> PortLayout:
+    x_mm = width_mm - 8.5
+    return PortLayout(
+        x_mm=x_mm,
+        text_x_mm=x_mm,
+        text_y_mm=11.0,
+        side="top",
+        label="Einspeisung",
+        style="solid",
+        tag="Stäubli",
+    )
+
+
 def port_layouts(ports: list, width_mm: float, height_mm: float, side: str) -> list[PortLayout]:
     if not ports:
         return []
 
-    margin_mm = 12.0
+    margin_mm = 6.0
     if len(ports) == 1:
         positions = [width_mm / 2]
     else:
@@ -170,11 +269,53 @@ def compute_label_width_mm(
     title_size_mm: float,
     meta_size_mm: float,
 ) -> float:
-    port_count_width = 30.0 + columns * 22.0
+    port_count_width = 20.0 + columns * 12.0
     title_width = 22.0 + estimated_text_width_mm(title_text, title_size_mm)
     meta_width = 22.0 + estimated_text_width_mm(meta_text, meta_size_mm)
-    port_label_width = 52.0 + max_port_label_length(component) * 2.2
-    return max(70.0, port_count_width, title_width, meta_width, port_label_width)
+    port_label_width = 40.0 + max_port_label_length(component) * 1.6
+    return max(110.0, port_count_width, title_width, meta_width, port_label_width)
+
+
+def choose_pdf_page_plan(layouts: list[LabelLayout], page_format: str) -> PdfPagePlan:
+    if page_format == "a4":
+        candidates = [
+            PdfPagePlan(page_size=A4, paper_format="a4", orientation="portrait"),
+            PdfPagePlan(page_size=landscape(A4), paper_format="a4", orientation="landscape"),
+            PdfPagePlan(
+                page_size=landscape(A3),
+                paper_format="a3",
+                orientation="landscape",
+                warning="Requested A4 PDF was too narrow; using A3 landscape instead.",
+            ),
+        ]
+    else:
+        candidates = [
+            PdfPagePlan(page_size=A3, paper_format="a3", orientation="portrait"),
+            PdfPagePlan(page_size=landscape(A3), paper_format="a3", orientation="landscape"),
+        ]
+
+    if not layouts:
+        return candidates[0]
+
+    required_width_pt = max(layout.width_mm * MM_TO_PT for layout in layouts) + (2 * 14 * MM_TO_PT)
+    for candidate in candidates:
+        if required_width_pt <= candidate.page_size[0]:
+            return candidate
+
+    overflow_warning = (
+        f"Requested {page_format.upper()} PDF is too narrow even on A3 landscape; "
+        "some labels may be clipped."
+    )
+    return PdfPagePlan(
+        page_size=landscape(A3),
+        paper_format="a3",
+        orientation="landscape",
+        warning=overflow_warning,
+    )
+
+
+def choose_pdf_page_size(layouts: list[LabelLayout], page_format: str) -> tuple[float, float]:
+    return choose_pdf_page_plan(layouts, page_format).page_size
 
 
 def max_port_label_length(component: Component) -> int:
@@ -185,7 +326,7 @@ def max_port_label_length(component: Component) -> int:
 
 
 def estimated_text_width_mm(text: str, font_size_mm: float) -> float:
-    return len(text) * font_size_mm * 0.56
+    return len(text) * font_size_mm * 0.38
 
 
 def fit_font_size(text: str, base_size_mm: float, min_size_mm: float) -> float:
@@ -306,23 +447,82 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
         line_attributes["stroke-linecap"] = "round"
 
     ET.SubElement(root, "line", line_attributes)
-    text = ET.SubElement(
+    label_text, value_text = split_port_label(port.label)
+    label_font_size = "3.8"
+    value_font_size = "8.0" if value_text == "Schuko" else "7.0"
+    label_y = port.text_y_mm - 1.6
+    value_y = port.text_y_mm + 2.2
+
+    if port.label == "Einspeisung" and port.tag == "Stäubli":
+        left = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{port.x_mm - 3.2}",
+                "y": f"{port.text_y_mm + 0.8}",
+                "font-size": "7.0",
+                "font-family": preferred_font_family(),
+                "font-weight": "500",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {port.x_mm - 3.2} {port.text_y_mm + 0.8})",
+            },
+        )
+        left.text = "Einspeisung"
+
+        right = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{port.x_mm + 3.2}",
+                "y": f"{port.text_y_mm + 0.8}",
+                "font-size": "7.0",
+                "font-family": preferred_font_family(),
+                "font-weight": "500",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {port.x_mm + 3.2} {port.text_y_mm + 0.8})",
+            },
+        )
+        right.text = "Stäubli"
+        return
+
+    if label_text:
+        text = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{port.text_x_mm}",
+                "y": f"{label_y}",
+                "font-size": label_font_size,
+                "font-family": preferred_font_family(),
+                "font-weight": "500",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {port.text_x_mm} {label_y})",
+            },
+        )
+        text.text = label_text
+
+    value = ET.SubElement(
         root,
         "text",
         {
             "x": f"{port.text_x_mm}",
-            "y": f"{port.text_y_mm}",
-            "font-size": "3.2",
-            "font-family": "DejaVu Sans, Arial, sans-serif",
+            "y": f"{value_y}",
+            "font-size": value_font_size,
+            "font-family": preferred_font_family(),
+            "font-weight": "700",
             "fill": color,
             "text-anchor": "middle",
-            "transform": f"rotate(-90 {port.text_x_mm} {port.text_y_mm})",
+            "transform": f"rotate(-90 {port.text_x_mm} {value_y})",
         },
     )
-    text.text = port.label
+    value.text = value_text
 
     if port.tag:
-        tag_x = port.x_mm - (port.text_x_mm - port.x_mm)
+        offset = 2.0
+        tag_x = port.x_mm - (port.text_x_mm - port.x_mm) + offset
         tag = ET.SubElement(
             root,
             "text",
@@ -330,7 +530,7 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
                 "x": f"{tag_x}",
                 "y": f"{port.text_y_mm}",
                 "font-size": "3.0",
-                "font-family": "DejaVu Sans, Arial, sans-serif",
+                "font-family": preferred_font_family(),
                 "fill": color,
                 "text-anchor": "middle",
                 "transform": f"rotate(-90 {tag_x} {port.text_y_mm})",
@@ -356,7 +556,7 @@ def add_text(
             "x": f"{x_mm}",
             "y": f"{y_mm}",
             "font-size": f"{size_mm}",
-            "font-family": "DejaVu Sans, Arial, sans-serif",
+            "font-family": preferred_font_family(),
             "font-weight": str(weight),
             "fill": color,
             "text-anchor": anchor,
@@ -392,7 +592,7 @@ def draw_pdf_label(pdf: canvas.Canvas, layout: LabelLayout, x_pt: float, y_pt: f
     )
 
     pdf.setFillColor(HexColor("#132029"))
-    pdf.setFont("Helvetica-Bold", max(7.5, layout.title_size_mm * 1.45))
+    pdf.setFont(pdf_font_name(True), max(7.5, layout.title_size_mm * 1.45))
     pdf.drawCentredString(
         x_pt + width_pt / 2,
         y_pt + height_pt - layout.title_y_mm * MM_TO_PT,
@@ -400,7 +600,7 @@ def draw_pdf_label(pdf: canvas.Canvas, layout: LabelLayout, x_pt: float, y_pt: f
     )
 
     pdf.setFillColor(HexColor("#27404C"))
-    pdf.setFont("Helvetica", max(5.0, layout.meta_size_mm * 1.6))
+    pdf.setFont(pdf_font_name(False), max(5.0, layout.meta_size_mm * 1.6))
     pdf.drawCentredString(
         x_pt + width_pt / 2,
         y_pt + height_pt - layout.meta_y_mm * MM_TO_PT,
@@ -442,19 +642,52 @@ def draw_pdf_port(
     if dash is not None:
         pdf.setDash()
 
+    label_text, value_text = split_port_label(port.label)
+    value_font_size = 8.3 if value_text == "Schuko" else 7.3
+    label_y = text_y - 3.2 * MM_TO_PT
+    value_y = text_y + 3.1 * MM_TO_PT
+
+    if port.label == "Einspeisung" and port.tag == "Stäubli":
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont(pdf_font_name(False), 7.0)
+        pdf.translate(x_pt + (port.x_mm - 3.2) * MM_TO_PT, text_y + 0.7 * MM_TO_PT)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, "Einspeisung")
+        pdf.restoreState()
+
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont(pdf_font_name(False), 7.0)
+        pdf.translate(x_pt + (port.x_mm + 3.2) * MM_TO_PT, text_y + 0.7 * MM_TO_PT)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, "Stäubli")
+        pdf.restoreState()
+        return
+
+    if label_text:
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont(pdf_font_name(False), 3.9)
+        pdf.translate(text_x, label_y)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, label_text)
+        pdf.restoreState()
+
     pdf.saveState()
     pdf.setFillColor(color)
-    pdf.setFont("Helvetica", 5.5)
-    pdf.translate(text_x, text_y)
+    pdf.setFont(pdf_font_name(True), value_font_size)
+    pdf.translate(text_x, value_y)
     pdf.rotate(90)
-    pdf.drawCentredString(0, 0, port.label)
+    pdf.drawCentredString(0, 0, value_text)
     pdf.restoreState()
 
     if port.tag:
-        tag_x = x_pt + (port.x_mm - (port.text_x_mm - port.x_mm)) * MM_TO_PT
+        offset_mm = 2.0
+        tag_x = x_pt + (port.x_mm - (port.text_x_mm - port.x_mm) + offset_mm) * MM_TO_PT
         pdf.saveState()
         pdf.setFillColor(color)
-        pdf.setFont("Helvetica", 4.8)
+        pdf.setFont(pdf_font_name(False), 4.8)
         pdf.translate(tag_x, text_y)
         pdf.rotate(90)
         pdf.drawCentredString(0, 0, port.tag)
@@ -475,6 +708,17 @@ def pdf_dash_pattern(style: str) -> tuple[float, float] | None:
     if style == "fine-dashed":
         return 1.5, 1.5
     return None
+
+
+def split_port_label(label: str) -> tuple[str, str]:
+    if label == "Schuko":
+        return "", "Schuko"
+    if label == "Einspeisung":
+        return "Einspeisung", "Stäubli"
+    if " " not in label:
+        return label, label
+    label_prefix, value = label.rsplit(" ", 1)
+    return label_prefix, value
 
 
 def port_tag(style: str) -> str | None:

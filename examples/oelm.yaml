@@ -28,9 +28,10 @@ components:
   - key: nea-hv
     name: NEA HV 110
     type: erzeuger
+    feed_in: true
     power:
-      apparent_kva: 110
-      active_kw: 88
+      apparent_kva: 100
+      active_kw: 80
     outputs:
       - ref: laieneinspeisung63
       - ref: cee125
@@ -45,6 +46,7 @@ components:
   - key: nea-sh
     name: NEA SH 250
     type: erzeuger
+    feed_in: true
     power:
       apparent_kva: 250
       active_kw: 200
@@ -63,6 +65,7 @@ components:
   - key: nea-n
     name: NEA F-Gr-N 50
     type: erzeuger
+    feed_in: true
     power:
       apparent_kva: 50
       active_kw: 40
@@ -77,8 +80,9 @@ components:
         count: 6
 
   - key: nea-elmo
-    name: NEA ELMO 60
+    name: NEA Elmshorn 60
     type: erzeuger
+    feed_in: true
     power:
       apparent_kva: 60
       active_kw: 48
@@ -97,6 +101,20 @@ components:
     type: verteiler
     inputs:
       - ref: cee63
+    outputs:
+      - ref: cee32
+        count: 2
+      - ref: cee16
+        count: 2
+      - ref: schuko
+        count: 6
+
+  - key: v2
+    name: V2
+    type: verteiler
+    feed_in: true
+    inputs:
+      - ref: cee63 #stäubli
     outputs:
       - ref: cee32
         count: 2
@@ -163,3 +181,12 @@ components:
       active_kw: 2.3
     inputs:
       - ref: cee16
+
+  - key: oelm
+    name: Unterkunft OELM
+    type: verbraucher
+    feed_in: true
+    power:
+      active_kw: 50
+    inputs:
+      - ref: cee63

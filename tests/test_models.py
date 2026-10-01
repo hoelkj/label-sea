@@ -93,6 +93,29 @@ components:
         load_project(yaml_file)
 
 
+def test_feed_in_expands_component_and_parses_flag(tmp_path: Path) -> None:
+    yaml_file = tmp_path / "feedin.yaml"
+    yaml_file.write_text(
+        """
+components:
+  - name: SEA 1
+    type: erzeuger
+    feed_in: true
+    outputs:
+      - kind: CEE
+        ampere: 63
+""".strip(),
+        encoding="utf-8",
+    )
+
+    project = load_project(yaml_file)
+
+    assert project.components[0].feed_in is True
+    assert project.components[0].feed_in_port is not None
+    assert project.components[0].feed_in_port.label == "Einspeisung"
+    assert project.components[0].feed_in_port.tag == "Stäubli"
+
+
 def test_schema_validation_reports_unknown_field(tmp_path: Path) -> None:
     yaml_file = tmp_path / "unknown-field.yaml"
     yaml_file.write_text(

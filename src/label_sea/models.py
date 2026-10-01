@@ -45,6 +45,12 @@ class Port:
 
 
 @dataclass(slots=True)
+class FeedInPort:
+    label: str = "Einspeisung"
+    tag: str = "Stäubli"
+
+
+@dataclass(slots=True)
 class Component:
     key: str
     name: str
@@ -53,6 +59,8 @@ class Component:
     active_kw: float | None = None
     inputs: list[Port] = field(default_factory=list)
     outputs: list[Port] = field(default_factory=list)
+    feed_in: bool = False
+    feed_in_port: FeedInPort | None = None
 
     @property
     def type_label(self) -> str:
@@ -171,6 +179,11 @@ def parse_component(
     inputs = parse_ports(key, "inputs", raw.get("inputs") or [], connectors)
     outputs = parse_ports(key, "outputs", raw.get("outputs") or [], connectors)
 
+    feed_in = raw.get("feed_in", False)
+    if not isinstance(feed_in, bool):
+        raise ValidationError(f"Component '{key}' field 'feed_in' must be a boolean.")
+    feed_in_port = FeedInPort() if feed_in else None
+
     if normalized_type == "generator" and not outputs:
         raise ValidationError(f"Generator '{key}' must define at least one output.")
     if normalized_type == "consumer" and not inputs:
@@ -197,6 +210,8 @@ def parse_component(
         active_kw=active_kw,
         inputs=inputs,
         outputs=outputs,
+        feed_in=feed_in,
+        feed_in_port=feed_in_port,
     )
 
 

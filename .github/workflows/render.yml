@@ -61,7 +61,7 @@ jobs:
             command+=(--pdf "$PDF_FORMAT")
           fi
 
-          "${command[@]}"
+          "${command[@]}" | tee render.log
 
           {
             echo "## Manual render"
@@ -71,6 +71,15 @@ jobs:
             echo "- PDF: \`$PDF_FORMAT\`"
             echo "- Output dir: \`$output_dir\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if grep -q '^warning:' render.log; then
+            {
+              echo ""
+              echo "### Warnings"
+              echo ""
+              grep '^warning:' render.log | sed 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload render artifacts
         uses: actions/upload-artifact@v4
