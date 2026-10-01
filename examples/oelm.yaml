@@ -29,8 +29,8 @@ components:
     name: NEA HV 110
     type: erzeuger
     power:
-      apparent_kva: 110
-      active_kw: 88
+      apparent_kva: 100
+      active_kw: 80
     outputs:
       - ref: laieneinspeisung63
       - ref: cee125
@@ -77,7 +77,7 @@ components:
         count: 6
 
   - key: nea-elmo
-    name: NEA ELMO 60
+    name: NEA Elmshorn 60
     type: erzeuger
     power:
       apparent_kva: 60

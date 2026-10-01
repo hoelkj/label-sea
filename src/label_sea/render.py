@@ -180,8 +180,8 @@ def build_layout(component: Component, band_height_mm: int) -> LabelLayout:
         meta_text = f"{meta_text} | {component.power_label}"
     title_text = compact_text(component.name, 34)
 
-    title_size_mm = fit_font_size(title_text, 6.8, 5.4)
-    meta_size_mm = fit_font_size(meta_text, 3.3, 2.7)
+    title_size_mm = fit_font_size(title_text, 7.8, 6.2)
+    meta_size_mm = fit_font_size(meta_text, 4.8, 3.6)
     width_mm = compute_label_width_mm(
         component,
         columns,
@@ -253,7 +253,7 @@ def compute_label_width_mm(
     title_width = 22.0 + estimated_text_width_mm(title_text, title_size_mm)
     meta_width = 22.0 + estimated_text_width_mm(meta_text, meta_size_mm)
     port_label_width = 40.0 + max_port_label_length(component) * 1.6
-    return max(70.0, port_count_width, title_width, meta_width, port_label_width)
+    return max(110.0, port_count_width, title_width, meta_width, port_label_width)
 
 
 def choose_pdf_page_plan(layouts: list[LabelLayout], page_format: str) -> PdfPagePlan:
@@ -306,7 +306,7 @@ def max_port_label_length(component: Component) -> int:
 
 
 def estimated_text_width_mm(text: str, font_size_mm: float) -> float:
-    return len(text) * font_size_mm * 0.56
+    return len(text) * font_size_mm * 0.38
 
 
 def fit_font_size(text: str, base_size_mm: float, min_size_mm: float) -> float:
@@ -427,23 +427,47 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
         line_attributes["stroke-linecap"] = "round"
 
     ET.SubElement(root, "line", line_attributes)
-    text = ET.SubElement(
+    label_text, value_text = split_port_label(port.label)
+    label_font_size = "3.8"
+    value_font_size = "8.0" if value_text == "Schuko" else "7.0"
+    label_y = port.text_y_mm - 1.6
+    value_y = port.text_y_mm + 2.2
+    if label_text:
+        text = ET.SubElement(
+            root,
+            "text",
+            {
+                "x": f"{port.text_x_mm}",
+                "y": f"{label_y}",
+                "font-size": label_font_size,
+                "font-family": preferred_font_family(),
+                "font-weight": "500",
+                "fill": color,
+                "text-anchor": "middle",
+                "transform": f"rotate(-90 {port.text_x_mm} {label_y})",
+            },
+        )
+        text.text = label_text
+
+    value = ET.SubElement(
         root,
         "text",
         {
             "x": f"{port.text_x_mm}",
-            "y": f"{port.text_y_mm}",
-            "font-size": "3.2",
+            "y": f"{value_y}",
+            "font-size": value_font_size,
             "font-family": preferred_font_family(),
+            "font-weight": "700",
             "fill": color,
             "text-anchor": "middle",
-            "transform": f"rotate(-90 {port.text_x_mm} {port.text_y_mm})",
+            "transform": f"rotate(-90 {port.text_x_mm} {value_y})",
         },
     )
-    text.text = port.label
+    value.text = value_text
 
     if port.tag:
-        tag_x = port.x_mm - (port.text_x_mm - port.x_mm)
+        offset = 2.0
+        tag_x = port.x_mm - (port.text_x_mm - port.x_mm) + offset
         tag = ET.SubElement(
             root,
             "text",
@@ -563,16 +587,30 @@ def draw_pdf_port(
     if dash is not None:
         pdf.setDash()
 
+    label_text, value_text = split_port_label(port.label)
+    value_font_size = 8.3 if value_text == "Schuko" else 7.3
+    label_y = text_y - 3.2 * MM_TO_PT
+    value_y = text_y + 3.1 * MM_TO_PT
+    if label_text:
+        pdf.saveState()
+        pdf.setFillColor(color)
+        pdf.setFont(pdf_font_name(False), 3.9)
+        pdf.translate(text_x, label_y)
+        pdf.rotate(90)
+        pdf.drawCentredString(0, 0, label_text)
+        pdf.restoreState()
+
     pdf.saveState()
     pdf.setFillColor(color)
-    pdf.setFont(pdf_font_name(False), 5.5)
-    pdf.translate(text_x, text_y)
+    pdf.setFont(pdf_font_name(True), value_font_size)
+    pdf.translate(text_x, value_y)
     pdf.rotate(90)
-    pdf.drawCentredString(0, 0, port.label)
+    pdf.drawCentredString(0, 0, value_text)
     pdf.restoreState()
 
     if port.tag:
-        tag_x = x_pt + (port.x_mm - (port.text_x_mm - port.x_mm)) * MM_TO_PT
+        offset_mm = 2.0
+        tag_x = x_pt + (port.x_mm - (port.text_x_mm - port.x_mm) + offset_mm) * MM_TO_PT
         pdf.saveState()
         pdf.setFillColor(color)
         pdf.setFont(pdf_font_name(False), 4.8)
@@ -596,6 +634,15 @@ def pdf_dash_pattern(style: str) -> tuple[float, float] | None:
     if style == "fine-dashed":
         return 1.5, 1.5
     return None
+
+
+def split_port_label(label: str) -> tuple[str, str]:
+    if label == "Schuko":
+        return "", "Schuko"
+    if " " not in label:
+        return label, label
+    label_prefix, value = label.rsplit(" ", 1)
+    return label_prefix, value
 
 
 def port_tag(style: str) -> str | None:

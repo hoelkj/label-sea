@@ -30,8 +30,8 @@ def test_layout_expands_for_many_ports_and_long_name() -> None:
     layout = build_layout(component, 50)
 
     assert 110 <= layout.width_mm < 135
-    assert layout.title_size_mm <= 6.8
-    assert layout.meta_size_mm <= 3.3
+    assert layout.title_size_mm <= 7.8
+    assert layout.meta_size_mm <= 4.8
 
 
 def test_wide_labels_switch_a4_to_landscape() -> None:
@@ -104,7 +104,41 @@ def test_rendered_svg_contains_fine_dashed_connector(tmp_path: Path) -> None:
     svg = output_file.read_text(encoding="utf-8")
 
     assert 'stroke-dasharray="2,2"' in svg
-    assert "CEE 16A" in svg
+    assert "CEE" in svg
+    assert "16A" in svg
+
+
+def test_port_label_emphasizes_ampere_value(tmp_path: Path) -> None:
+    component = Component(
+        key="consumer-2",
+        name="Pumpe",
+        type="consumer",
+        inputs=[Port(kind="CEE", ampere=32)],
+    )
+
+    output_file = tmp_path / "consumer-port-labels.svg"
+    render_component_svg(component, 50, output_file)
+    svg = output_file.read_text(encoding="utf-8")
+
+    assert "CEE" in svg
+    assert "32A" in svg
+    assert 'font-size="7.0"' in svg
+
+
+def test_schuko_label_is_not_drawn_twice(tmp_path: Path) -> None:
+    component = Component(
+        key="consumer-3",
+        name="Pumpe",
+        type="consumer",
+        outputs=[Port(kind="Schuko", ampere=16)],
+    )
+
+    output_file = tmp_path / "schuko-port-label.svg"
+    render_component_svg(component, 50, output_file)
+    svg = output_file.read_text(encoding="utf-8")
+
+    assert svg.count("Schuko") == 1
+    assert 'font-size="8.0"' in svg
 
 
 def test_preferred_font_family_prefers_lubalin() -> None:
