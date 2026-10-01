@@ -7,6 +7,7 @@ from label_sea.render import (
     build_layout,
     choose_pdf_page_plan,
     choose_pdf_page_size,
+    preferred_font_family,
     render_component_svg,
 )
 
@@ -104,3 +105,10 @@ def test_rendered_svg_contains_fine_dashed_connector(tmp_path: Path) -> None:
 
     assert 'stroke-dasharray="2,2"' in svg
     assert "CEE 16A" in svg
+
+
+def test_preferred_font_family_prefers_lubalin() -> None:
+    family = preferred_font_family()
+
+    assert family.startswith('"Lubalin Graph", "Lubalin", "ITC Lubalin Graph Std"')
+    assert "Arial" in family

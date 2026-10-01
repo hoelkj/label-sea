@@ -93,6 +93,7 @@ Hinweise fuer lokale Entwicklung:
 - `docker run --rm label-sea validate --input examples/template.yaml`
 - GitHub Actions prüft Ruff und Pytest automatisch und erzeugt zusätzlich SBOM und CVE-Scan für das Container-Image
 - Für manuelles Rendern gibt es den Workflow `Render labels`; dort wird ein YAML-Pfad aus dem Repo übergeben und das Ergebnis als Artefakt mit 2 Tagen Retention abgelegt
+- Die Ausgabe bevorzugt Lubalin, falls die Schrift installiert ist; wenn nicht, wird automatisch eine kompatible Systemschrift verwendet.
 
 ## Lizenz
 

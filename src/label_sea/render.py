@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import glob
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A3, A4, landscape
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from label_sea.models import Component
@@ -17,6 +21,71 @@ TYPE_COLORS = {
     "consumer": {"accent": "#B26A00", "fill": "#FFF8EB"},
     "distributor": {"accent": "#005B96", "fill": "#EEF6FC"},
 }
+
+
+def preferred_font_family() -> str:
+    candidates = [
+        "Lubalin Graph",
+        "Lubalin",
+        "ITC Lubalin Graph Std",
+        "Arial",
+        "DejaVu Sans",
+        "Noto Sans",
+    ]
+    formatted = ", ".join(f'"{candidate}"' for candidate in candidates)
+    return f"{formatted}, sans-serif"
+
+
+def _find_font_file() -> str | None:
+    custom_font_dir = os.environ.get("LABEL_SEA_FONT")
+    roots = [Path(custom_font_dir)] if custom_font_dir else []
+    project_root = Path(__file__).resolve().parents[2]
+    roots.extend(
+        [
+            project_root / "fonts",
+            Path.cwd() / "fonts",
+            Path.home() / ".fonts",
+            Path.home() / ".local" / "share" / "fonts",
+            Path("/usr/share/fonts"),
+            Path("/usr/local/share/fonts"),
+        ]
+    )
+
+    patterns = ["*Lubalin*", "*LubalinGraph*", "*lubalin*"]
+    seen: set[str] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for pattern in patterns:
+            for match in glob.glob(str(root / pattern), recursive=True):
+                normalized = str(Path(match))
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                if match.lower().endswith((".ttf", ".otf", ".ttc")):
+                    return normalized
+    return None
+
+
+def _register_lubalin_font_if_present() -> str | None:
+    font_file = _find_font_file()
+    if not font_file:
+        return None
+    font_name = "Lubalin"
+    try:
+        pdfmetrics.registerFont(TTFont(font_name, font_file))
+    except Exception:
+        return None
+    return font_name
+
+
+LUBALIN_FONT = _register_lubalin_font_if_present()
+
+
+def pdf_font_name(is_bold: bool) -> str:
+    if LUBALIN_FONT is not None:
+        return LUBALIN_FONT
+    return "Helvetica-Bold" if is_bold else "Helvetica"
 
 
 @dataclass(slots=True)
@@ -365,7 +434,7 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
             "x": f"{port.text_x_mm}",
             "y": f"{port.text_y_mm}",
             "font-size": "3.2",
-            "font-family": "DejaVu Sans, Arial, sans-serif",
+            "font-family": preferred_font_family(),
             "fill": color,
             "text-anchor": "middle",
             "transform": f"rotate(-90 {port.text_x_mm} {port.text_y_mm})",
@@ -382,7 +451,7 @@ def add_port_svg(root: ET.Element, height_mm: float, port: PortLayout, color: st
                 "x": f"{tag_x}",
                 "y": f"{port.text_y_mm}",
                 "font-size": "3.0",
-                "font-family": "DejaVu Sans, Arial, sans-serif",
+                "font-family": preferred_font_family(),
                 "fill": color,
                 "text-anchor": "middle",
                 "transform": f"rotate(-90 {tag_x} {port.text_y_mm})",
@@ -408,7 +477,7 @@ def add_text(
             "x": f"{x_mm}",
             "y": f"{y_mm}",
             "font-size": f"{size_mm}",
-            "font-family": "DejaVu Sans, Arial, sans-serif",
+            "font-family": preferred_font_family(),
             "font-weight": str(weight),
             "fill": color,
             "text-anchor": anchor,
@@ -444,7 +513,7 @@ def draw_pdf_label(pdf: canvas.Canvas, layout: LabelLayout, x_pt: float, y_pt: f
     )
 
     pdf.setFillColor(HexColor("#132029"))
-    pdf.setFont("Helvetica-Bold", max(7.5, layout.title_size_mm * 1.45))
+    pdf.setFont(pdf_font_name(True), max(7.5, layout.title_size_mm * 1.45))
     pdf.drawCentredString(
         x_pt + width_pt / 2,
         y_pt + height_pt - layout.title_y_mm * MM_TO_PT,
@@ -452,7 +521,7 @@ def draw_pdf_label(pdf: canvas.Canvas, layout: LabelLayout, x_pt: float, y_pt: f
     )
 
     pdf.setFillColor(HexColor("#27404C"))
-    pdf.setFont("Helvetica", max(5.0, layout.meta_size_mm * 1.6))
+    pdf.setFont(pdf_font_name(False), max(5.0, layout.meta_size_mm * 1.6))
     pdf.drawCentredString(
         x_pt + width_pt / 2,
         y_pt + height_pt - layout.meta_y_mm * MM_TO_PT,
@@ -496,7 +565,7 @@ def draw_pdf_port(
 
     pdf.saveState()
     pdf.setFillColor(color)
-    pdf.setFont("Helvetica", 5.5)
+    pdf.setFont(pdf_font_name(False), 5.5)
     pdf.translate(text_x, text_y)
     pdf.rotate(90)
     pdf.drawCentredString(0, 0, port.label)
@@ -506,7 +575,7 @@ def draw_pdf_port(
         tag_x = x_pt + (port.x_mm - (port.text_x_mm - port.x_mm)) * MM_TO_PT
         pdf.saveState()
         pdf.setFillColor(color)
-        pdf.setFont("Helvetica", 4.8)
+        pdf.setFont(pdf_font_name(False), 4.8)
         pdf.translate(tag_x, text_y)
         pdf.rotate(90)
         pdf.drawCentredString(0, 0, port.tag)
