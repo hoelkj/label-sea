@@ -134,7 +134,7 @@ jobs:
           vuln-type: os,library
 
       - name: Upload Trivy report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: label-sea-trivy-report
           path: trivy-results.json
