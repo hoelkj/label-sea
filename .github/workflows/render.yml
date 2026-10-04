@@ -82,7 +82,7 @@ jobs:
           fi
 
       - name: Upload render artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: label-sea-render-${{ github.run_id }}
           path: build/render-${{ github.run_id }}
